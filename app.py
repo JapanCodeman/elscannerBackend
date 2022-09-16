@@ -1,140 +1,77 @@
+import datetime
+from distutils.log import error
+import json
+
 import os
 import pymongo
-# from bson.objectid import ObjectId #BSON now included with pymongo?
-# from bson import json_util
+from bson.objectid import ObjectId
 from bson import json_util
 from dotenv import find_dotenv, load_dotenv
 from flask_jwt_extended import create_access_token
 from flask_jwt_extended import JWTManager
-from flask import Flask, jsonify, make_response, Response, Request, request
+from flask import Flask, jsonify, make_response, Response, request
 from flask_cors import CORS
-import json
-from pymongo import mongo_client
-import uuid #use for public_id for simplicity's sake
+from pymongo import ReturnDocument
+import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 
-load_dotenv(find_dotenv())
+load_dotenv()
 
-CONNECTION_STRING = os.getenv('CONNECTION_STRING')
-SECRET_KEY = os.getenv('SECRET_KEY')
+CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
+SECRET_KEY = os.environ.get('SECRET_KEY')
 
-
-client = pymongo.MongoClient(CONNECTION_STRING)
-
-app = Flask(__name__) 
+app = Flask(__name__)
 app.config['CORS_HEADERS'] = 'Content-Type'
 cors = CORS(app)
 
-# print("THIS IS THE CONNECTION URL", CONNECTION_URL)
-# print("THIS IS THE SECRET_KEY", SECRET_KEY)
-app.config['JWT_SECRET_KEY'] = SECRET_KEY
-jwt = JWTManager(app)
-
-html = '''
-<!doctype html>
-<html>
-  <head>
-    <title>ELScanner Backend</title>
-  </head>
-  <body>
-    <p>Backend for ELScanner is running</p>
-  </body>
-</html>
-'''
-
-
-try:
-  client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS = 5000)
-
-except:
-  print("Error - cannot connect to database")
+client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)
 
 Database = client.get_database("ELScanner")
 
 users = Database.users
-books = Database.books
 
-registration_codes = set({'PGalOv', 'hRYzyu', 'BQiIDP', 'c0J3wM', 'TcLyW3', '5ACsIU', '7KbWKY', 'boCrge', '1oafsV', 'LrTTy6', 'jwYkK3', 'ZH41Ok', '2brnvx', 'xxXkPZ', 'w0QZvA', 'EG9Eus', 'Ne8W4t', 'hq4jCg', 'jZpf7m', 'K51shh', 'ltoRG1', 'BpQ4Ue', 'WG1y0M', 'mQF97I', 'UDHReI', 'N4halH', 'sHVCW1', 'sGKizK', '1H0dnU', 'zc69DB'})
+try:
+  print("Connected to MongoDB Atlas server")
+except Exception:
+  print("Unable to connect to the server")
 
-
-# Test route
-@app.route('/')
+@app.route("/")
 def test():
-  return html
+  return "ElScanner up and running"
 
-
-# Basic login route
-@app.route('/login', methods=['POST'])
+@app.route("/login")
 def create_token():
-  email = Request.json.get('email')
-  password = Request.json.get('password')
-
-  if not email or not password:
-    return f'Email or password missing - unable to distribute token'
-  
-  user = users.find_one({'email': email})
- 
-  if not user:
-    return f'User not found - unable to distribute token'
-
-  if check_password_hash(user['password'], password):
-    try:
-      token = create_access_token(identity={user})
-      return jsonify(token=token)
-
-    except:
-      return f'Unable to distribute token'
-
-
-# Register an instructor/instructor-admin - requires valid registration code
-@app.route('/register', methods=["POST"])
-def register():
-  first = request.json.get("first", None)
-  last = request.json.get("last", None)
   email = request.json.get("email", None)
   password = request.json.get("password", None)
-  registration_code = request.json.get("registration_code", None)
 
-  _hashed_password = generate_password_hash(password, method='sha256')
+  if not email or not password:
+    return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
-  queryObject = {
-    "first": first,
-    "last": last,
-    "role": 'Instructor',
-    "public_id": str(uuid.uuid4()),
-    "email": email,
-    "password": _hashed_password,
-    "registration_code": registration_code,
-    "loggedStatus": "NOT_LOGGED_IN",
-    "isAdmin": "NOT_ADMIN"
-  }
+  user = users.find_one({"email" : email})
 
-  if registration_code in registration_codes:
-    query = users.insert_one(queryObject)
-    return f'{first} {last} and associated data registered to user database as Instructor'
-  else:
-    return f'Invalid instructor registration code'
+  if not user:
+    return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
-# Register one student
-@app.route('/register-student', methods=['POST'])
-def register_student():
-  first = Request.get_json("first")
-  last = Request.get_json("last")
-  
-  email = Request.get_json("email")
-  checked_out_list = Request.get_json("checkedOutList")
+  if check_password_hash(user["password"], password):
+    try:
+      token = create_access_token(identity={"email" : email, "role" : user["role"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
+      return jsonify(token=token)
+    except:
+      return "Token unable to be distributed", error
 
-  query_object = {
-    "first": first,
-    "last": last,
-    "email": email,
-    "public_id": str(uuid.uuid4()),
-    "checkedOutList": checked_out_list
-  }
+  return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
-# @app.route('/register-book', methods=['POST'])
-# def register_book():
+@app.route('/users', methods=['GET'])
+def find_all_users():
+  results = list(users.find())
+  for user in results:
+    user["_id"] = str(user["_id"])
 
+  return Response(
+    response=json.dumps(results),
+    status=200,
+    mimetype="application/json"
+  )
 
-if __name__ == '__main__':
-  app.run(debug=True) 
+if __name__ == "__main__":
+  app.run(debug=True)

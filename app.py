@@ -1,5 +1,6 @@
 import datetime
 from distutils.log import error
+from hashlib import new
 import json
 
 import os
@@ -29,6 +30,7 @@ client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)
 Database = client.get_database("ELScanner")
 
 users = Database.users
+books = Database.books
 
 try:
   print("Connected to MongoDB Atlas server")
@@ -72,6 +74,31 @@ def find_all_users():
     status=200,
     mimetype="application/json"
   )
+
+# Register new user
+# TODO
+
+# Retrieve book info
+@app.route('/retrieve-book-info/<UPC>', methods=['GET'])
+def retrieve_book_info(UPC):
+  barcode = UPC
+  book_info = books.find_one({'upc' : UPC})
+
+  return Response(
+  response=json.dumps(book_info),
+  status=200,
+  mimetype="application/json"
+)
+
+# Register or patch new book
+@app.route('/register-new-book/<UPC>', methods=['PATCH', 'PUT'])
+def register_new_book(UPC):
+
+  new_book_info = request.get_json()
+
+  books.insert_one(new_book_info)
+
+  return f'{new_book_info} registered to book database'
 
 if __name__ == "__main__":
   app.run(debug=True)

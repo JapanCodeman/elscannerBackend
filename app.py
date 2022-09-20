@@ -1,6 +1,6 @@
 import datetime
 from distutils.log import error
-from hashlib import new
+from hashlib import new, sha256
 import json
 
 import os
@@ -76,13 +76,31 @@ def find_all_users():
   )
 
 # Register new user
-# TODO
+@app.route('/register-new-user', methods=['POST'])
+def register_new_user():
+  registerant_info = request.get_json()
+  registerant_info["public_id"] = str(uuid.uuid4())
+  password = registerant_info["password"]
+  _hashed_password = generate_password_hash(password, method='sha256')
+  registerant_info["password"] = _hashed_password
+
+  users.insert_one(registerant_info)
+
+  return f'{registerant_info["first"]} {registerant_info["last"]} registered to database' 
+
+# Delete a user
+@app.route('/delete-a-user/<public_id>', methods=['DELETE'])
+def delete_a_user(public_id):
+  users.delete_one({"public_id" : public_id})
+
+  return 'User deleted from database'
 
 # Retrieve book info
 @app.route('/retrieve-book-info/<UPC>', methods=['GET'])
 def retrieve_book_info(UPC):
   barcode = UPC
   book_info = books.find_one({'upc' : UPC})
+  book_info["_id"] = str("_id")
 
   return Response(
   response=json.dumps(book_info),
@@ -99,6 +117,16 @@ def register_new_book(UPC):
   books.insert_one(new_book_info)
 
   return f'{new_book_info} registered to book database'
+
+# Check book back in
+@app.route('/check-book-in/<UPC>', methods=['PATCH'])
+def check_book_in(UPC):
+  change_book_status = "Checked in"
+  books.update_one({'upc' : UPC}, {"$set" : {
+    "status" : change_book_status,
+    "currentHolder" : "Onomichi Gakuen English Library"}})
+
+  return f'{UPC} checked in'
 
 if __name__ == "__main__":
   app.run(debug=True)

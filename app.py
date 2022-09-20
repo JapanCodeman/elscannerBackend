@@ -63,6 +63,7 @@ def create_token():
 
   return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
+# Return all users
 @app.route('/users', methods=['GET'])
 def find_all_users():
   results = list(users.find())
@@ -87,6 +88,19 @@ def register_new_user():
   users.insert_one(registerant_info)
 
   return f'{registerant_info["first"]} {registerant_info["last"]} registered to database' 
+
+# Lookup a user
+@app.route('/lookup-user/<public_id>', methods=['GET'])
+def lookup_user(public_id):
+
+  user = users.find_one({"public_id" : public_id})
+  user["_id"] = str(user["_id"])
+
+  return Response(
+    response=json.dumps(user),
+    status=200,
+    mimetype="application/json"
+  )
 
 # Delete a user
 @app.route('/delete-a-user/<public_id>', methods=['DELETE'])

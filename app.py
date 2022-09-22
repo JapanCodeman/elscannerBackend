@@ -112,9 +112,10 @@ def delete_a_user(public_id):
 # Retrieve book info
 @app.route('/retrieve-book-info/<UPC>', methods=['GET'])
 def retrieve_book_info(UPC):
-  barcode = UPC
-  book_info = books.find_one({'upc' : UPC})
-  book_info["_id"] = str("_id")
+  book_info = books.find_one({"upc" : UPC})
+  book_info["_id"] = str(book_info["_id"])
+  held_by = books.find_one({ "currentHolder" : {"$exists" : "true"}})
+
 
   return Response(
   response=json.dumps(book_info),
@@ -136,11 +137,36 @@ def register_new_book(UPC):
 @app.route('/check-book-in/<UPC>', methods=['PATCH'])
 def check_book_in(UPC):
   change_book_status = "Checked in"
-  books.update_one({'upc' : UPC}, {"$set" : {
+  books.update_one({ 'upc' : UPC }, {"$set" : {
     "status" : change_book_status,
     "currentHolder" : "Onomichi Gakuen English Library"}})
 
   return f'{UPC} checked in'
+
+# Check book out to student - #TODO
+@app.route('/check-book-out/<UPC>/<public_id>', methods=['PATCH'])
+def check_book_out(UPC, public_id):
+  student = users.find_one({ 'public_id' : public_id })
+  book = books.find_one({'upc' : UPC})
+
+  _checked_out_books = list(student["checkedOutBooks"])
+  _checked_out_books.append(UPC)
+  
+  books.update_one({ 'upc' : UPC }, {"$set" : {
+    "status" : "Checked Out",
+    "currentHolder" : student["public_id"]
+  }})
+
+  users.update_one({ 'public_id' : public_id }, {"$set" : {
+    "checkedOutBooks" : _checked_out_books}})
+
+  return f"{book['title']} checked out to {student['first']} {student['last']}"
+
+@app.route('/testing', methods=['GET'])
+def testing():
+  student = users.find_one({ 'public_id' : '80ecf003-3ea2-4a84-971d-4673c2221273'})
+  return student['email']
+  
 
 if __name__ == "__main__":
   app.run(debug=True)

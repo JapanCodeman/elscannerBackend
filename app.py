@@ -32,8 +32,15 @@ Database = client.get_database("ELScanner")
 users = Database.users
 books = Database.books
 
+@app.route('/db-connect-confirm', methods=['GET'])
+def database_connection_test():
+  if users.find():
+    return True
+
+
 try:
-  print("Connected to MongoDB Atlas server")
+  if database_connection_test():
+    print("Connected to MongoDB Atlas server")
 except Exception:
   print("Unable to connect to the server")
 
@@ -114,7 +121,7 @@ def delete_a_user(public_id):
 def retrieve_book_info(UPC):
   book_info = books.find_one({"upc" : UPC})
   book_info["_id"] = str(book_info["_id"])
-  held_by = books.find_one({ "currentHolder" : {"$exists" : "true"}})
+  # held_by = books.find_one({ "currentHolder" : {"$exists" : "true"}}) <--unnecessary? Just include current holder in book object and return that
 
 
   return Response(
@@ -162,10 +169,12 @@ def check_book_out(UPC, public_id):
 
   return f"{book['title']} checked out to {student['first']} {student['last']}"
 
-@app.route('/testing', methods=['GET'])
-def testing():
-  student = users.find_one({ 'public_id' : '80ecf003-3ea2-4a84-971d-4673c2221273'})
-  return student['email']
+@app.route('/delete-a-book/<UPC>', methods=['DELETE'])
+def delete_a_book(upc):
+  book_to_delete = books.find_one({'upc' : upc})
+  delete_book = books.find_one_and_delete({'upc' : upc})
+
+  return f'{book_to_delete["title"]} removed from database'
   
 
 if __name__ == "__main__":

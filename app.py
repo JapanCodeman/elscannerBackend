@@ -1,6 +1,5 @@
 import datetime
 from distutils.log import error
-from hashlib import new, sha256
 import json
 
 import os
@@ -21,9 +20,11 @@ load_dotenv()
 CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='./static')
 app.config['CORS_HEADERS'] = 'Content-Type'
 cors = CORS(app)
+app.config['JWT_SECRET_KEY'] = SECRET_KEY
+jwt = JWTManager(app)
 
 client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)
 
@@ -31,6 +32,7 @@ Database = client.get_database("ELScanner")
 
 users = Database.users
 books = Database.books
+
 
 @app.route('/db-connect-confirm', methods=['GET'])
 def database_connection_test():
@@ -48,10 +50,11 @@ except Exception:
 def test():
   return "ElScanner up and running"
 
-@app.route("/login")
+@app.route("/login", methods=["POST"])
 def create_token():
-  email = request.json.get("email", None)
-  password = request.json.get("password", None)
+
+  email = request.json.get("email")
+  password = request.json.get("password")
 
   if not email or not password:
     return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
@@ -63,7 +66,7 @@ def create_token():
 
   if check_password_hash(user["password"], password):
     try:
-      token = create_access_token(identity={"email" : email, "role" : user["role"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
+      token = create_access_token(identity={"email" : email, "user" : user["public_id"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
       return jsonify(token=token)
     except:
       return "Token unable to be distributed", error
@@ -115,6 +118,13 @@ def delete_a_user(public_id):
   users.delete_one({"public_id" : public_id})
 
   return 'User deleted from database'
+
+# DELETE ALL USERS - A-BOMB
+@app.route('/delete-all-users', methods=['DELETE'])
+def delete_all_users():
+  users.delete_many({})
+
+  return 'Users table cleared'
 
 # Retrieve book info
 @app.route('/retrieve-book-info/<UPC>', methods=['GET'])

@@ -7,9 +7,10 @@ import pymongo
 from bson.objectid import ObjectId
 from bson import json_util
 from dotenv import find_dotenv, load_dotenv
-from flask_jwt_extended import create_access_token
 from flask_jwt_extended import JWTManager
-from flask import Flask, jsonify, make_response, Response, request
+from flask_jwt_extended import create_access_token
+from flask import Flask, jsonify, make_response, Response
+from flask import request
 from flask_cors import CORS
 from pymongo import ReturnDocument
 import uuid
@@ -20,10 +21,11 @@ load_dotenv()
 CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
-app = Flask(__name__, static_folder='./static')
+app = Flask(__name__)
+
 app.config['CORS_HEADERS'] = 'Content-Type'
-cors = CORS(app)
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
+cors = CORS(app)
 jwt = JWTManager(app)
 
 client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)
@@ -34,43 +36,36 @@ users = Database.users
 books = Database.books
 
 
-@app.route('/db-connect-confirm', methods=['GET'])
+@app.route('/db-connect-confirm', methods=['GET']) # Not working as intended
 def database_connection_test():
-  if users.find():
-    return True
+  if users.find() != None:
+    try:
+      if database_connection_test():
+        return "Connected to MongoDB Atlas server"
+    except Exception:
+      return "Unable to connect to the server"
+  return "Unable to connect to the server - check wifi connection/permissions"
 
-
-try:
-  if database_connection_test():
-    print("Connected to MongoDB Atlas server")
-except Exception:
-  print("Unable to connect to the server")
-
-@app.route("/")
-def test():
-  return "ElScanner up and running"
-
-@app.route("/login", methods=["POST"])
-def create_token():
-
-  email = request.json.get("email")
-  password = request.json.get("password")
+@app.route('/login', methods=["POST"])
+def login():
+  email = request.json.get("email", None)
+  password = request.json.get("password", None)
+  user = users.find_one({"email" : email})
 
   if not email or not password:
     return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
-
-  user = users.find_one({"email" : email})
 
   if not user:
     return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
   if check_password_hash(user["password"], password):
     try:
-      token = create_access_token(identity={"email" : email, "user" : user["public_id"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
+      token = create_access_token(identity={"user" : user["public_id"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
       return jsonify(token=token)
     except:
       return "Token unable to be distributed", error
 
+  # return create_access_token(identity={"email" : email, "user" : user["public_id"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
   return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
 # Return all users
@@ -92,7 +87,7 @@ def register_new_user():
   registerant_info = request.get_json()
   registerant_info["public_id"] = str(uuid.uuid4())
   password = registerant_info["password"]
-  _hashed_password = generate_password_hash(password, method='sha256')
+  _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
   registerant_info["password"] = _hashed_password
 
   users.insert_one(registerant_info)

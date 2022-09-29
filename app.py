@@ -11,7 +11,7 @@ from flask_jwt_extended import JWTManager
 from flask_jwt_extended import create_access_token
 from flask import Flask, jsonify, make_response, Response
 from flask import request
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from pymongo import ReturnDocument
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -25,7 +25,7 @@ app = Flask(__name__)
 
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
-cors = CORS(app)
+cors = CORS(app, supports_credentials=True)
 jwt = JWTManager(app)
 
 client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)
@@ -47,16 +47,17 @@ def database_connection_test():
   return "Unable to connect to the server - check wifi connection/permissions"
 
 @app.route('/login', methods=["POST"])
+@cross_origin(supports_credentials=True)
 def login():
   email = request.json.get("email", None)
   password = request.json.get("password", None)
   user = users.find_one({"email" : email})
 
   if not email or not password:
-    return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
+    return make_response('Could not verify - not email or password', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
   if not user:
-    return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
+    return make_response('Could not verify - not user', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
   if check_password_hash(user["password"], password):
     try:
@@ -65,8 +66,7 @@ def login():
     except:
       return "Token unable to be distributed", error
 
-  # return create_access_token(identity={"email" : email, "user" : user["public_id"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
-  return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
+  return make_response('Could not verify - end of function', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
 # Return all users
 @app.route('/users', methods=['GET'])

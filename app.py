@@ -1,5 +1,6 @@
 import datetime
 from distutils.log import error
+from email import message
 import json
 
 import os
@@ -121,25 +122,37 @@ def delete_all_users():
 
   return 'Users table cleared'
 
+# Get all books
+@app.route('/books', methods=['GET'])
+def get_all_books():
+  all_books = books.find()
+  for book in all_books:
+    book["_id"] = str(book["_id"])
+
+  return all_books
+
 # Retrieve book info
 @app.route('/retrieve-book-info/<UPC>', methods=['GET'])
 def retrieve_book_info(UPC):
-  book_info = books.find_one({"upc" : UPC})
-  book_info["_id"] = str(book_info["_id"])
+  if books.count_documents({ 'upc' : UPC }, limit = 1):
+    book_info = books.find_one({"upc" : UPC})
+    book_info["_id"] = str(book_info["_id"])
   # held_by = books.find_one({ "currentHolder" : {"$exists" : "true"}}) <--unnecessary? Just include current holder in book object and return that
 
+    return Response(
+    response=json.dumps(book_info),
+    status=200,
+    mimetype="application/json"
+  )
 
-  return Response(
-  response=json.dumps(book_info),
-  status=200,
-  mimetype="application/json"
-)
+  return 'Book not registered'
 
 # Register or patch new book
-@app.route('/register-new-book/<UPC>', methods=['PATCH', 'PUT'])
+@app.route('/register-new-book/<UPC>', methods=['PATCH', 'POST', 'PUT'])
 def register_new_book(UPC):
 
   new_book_info = request.get_json()
+  new_book_info['wordCount'] = int(new_book_info['wordCount'])
 
   books.insert_one(new_book_info)
 
@@ -175,9 +188,9 @@ def check_book_out(UPC, public_id):
   return f"{book['title']} checked out to {student['first']} {student['last']}"
 
 @app.route('/delete-a-book/<UPC>', methods=['DELETE'])
-def delete_a_book(upc):
-  book_to_delete = books.find_one({'upc' : upc})
-  delete_book = books.find_one_and_delete({'upc' : upc})
+def delete_a_book(UPC):
+  book_to_delete = books.find_one({'upc' : UPC})
+  delete_book = books.find_one_and_delete({'upc' : UPC})
 
   return f'{book_to_delete["title"]} removed from database'
   

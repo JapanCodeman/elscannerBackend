@@ -19,6 +19,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()
 
+ADMIN_CODES = os.environ.get('ADMIN_CODES')
 CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
@@ -90,10 +91,33 @@ def register_new_user():
   password = registerant_info["password"]
   _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
   registerant_info["password"] = _hashed_password
+  registerant_info["userRole"] = 'Student'
 
   users.insert_one(registerant_info)
 
   return f'{registerant_info["first"]} {registerant_info["last"]} registered to database' 
+
+# Register new admin
+@app.route('/register-new-admin', methods=['POST'])
+def register_new_admin():
+  registerant_info = request.get_json()
+
+  if registerant_info["registrationCode"] in ADMIN_CODES:
+    del(registerant_info["registrationCode"])
+    registerant_info["public_id"] = str(uuid.uuid4())
+    password = registerant_info["password"]
+    _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
+    registerant_info["password"] = _hashed_password
+    registerant_info["userRole"] = 'Administrator'
+
+    users.insert_one(registerant_info)
+  else: #TODO need to fix this response
+    return Response(
+    status=401,
+    mimetype="application/json"
+  )
+
+  return f'{registerant_info["first"]} {registerant_info["last"]} registered to database as admin' 
 
 # Lookup a user
 @app.route('/lookup-user/<public_id>', methods=['GET'])

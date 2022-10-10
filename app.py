@@ -63,7 +63,7 @@ def login():
 
   if check_password_hash(user["password"], password):
     try:
-      token = create_access_token(identity={"user" : user["public_id"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
+      token = create_access_token(identity={'userRole' : user['userRole'], 'public_id' : user['public_id'], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
       return jsonify(token=token)
     except:
       return "Token unable to be distributed", error
@@ -109,6 +109,7 @@ def register_new_admin():
     _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
     registerant_info["password"] = _hashed_password
     registerant_info["userRole"] = 'Administrator'
+    registerant_info["isAdmin"] = True
 
     users.insert_one(registerant_info)
   else: #TODO need to fix this response

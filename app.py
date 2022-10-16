@@ -4,6 +4,7 @@ from email import message
 import json
 
 import os
+from turtle import title
 import pymongo
 from bson.objectid import ObjectId
 from bson import json_util
@@ -92,6 +93,10 @@ def register_new_user():
   _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
   registerant_info["password"] = _hashed_password
   registerant_info["userRole"] = 'Student'
+  registerant_info["wordsRead"] = 0
+  registerant_info["totalBooksRead"] = 0
+  registerant_info["checkedOutBooks"] = []
+  registerant_info["listOfReadBooks"] = []
 
   users.insert_one(registerant_info)
 
@@ -104,12 +109,13 @@ def register_new_admin():
 
   if registerant_info["registrationCode"] in ADMIN_CODES:
     del(registerant_info["registrationCode"])
+    del(registerant_info["class"])
     registerant_info["public_id"] = str(uuid.uuid4())
     password = registerant_info["password"]
     _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
     registerant_info["password"] = _hashed_password
     registerant_info["userRole"] = 'Administrator'
-    registerant_info["isAdmin"] = True
+    # registerant_info["isAdmin"] = True
 
     users.insert_one(registerant_info)
   else: #TODO need to fix this response
@@ -171,6 +177,27 @@ def retrieve_book_info(UPC):
   )
 
   return 'Book not registered'
+
+# Retrieve book title(s) from list
+@app.route('/retrieve-book-titles', methods=['POST'])
+def retrieve_book_titles():
+  list_of_UPCs = request.get_json()
+  title_list = []
+
+  for UPC in list_of_UPCs["checkedOutBooks"]:
+    book_info = books.find_one({"upc" : UPC})
+    book_info["_id"] = str(book_info["_id"])
+    title_list.append(book_info["title"]) # make this append ({UPC:book_info["title"]}) to "link" UPC with book in front end for next axios call
+
+  return title_list
+
+# Retrieve books with options
+@app.route('/retrieve-books', methods=['POST'])
+def retrieve_books_with_options():
+  params = request.get_json()
+  results = books.find({'currentHolder' : params['public_id']}, params['options'])
+
+  return results
 
 # Register or patch new book
 @app.route('/register-new-book/<UPC>', methods=['PATCH', 'POST', 'PUT'])

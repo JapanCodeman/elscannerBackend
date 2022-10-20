@@ -179,15 +179,16 @@ def retrieve_book_info(UPC):
   return 'Book not registered'
 
 # Retrieve book title(s) from list
-@app.route('/retrieve-book-titles', methods=['POST'])
-def retrieve_book_titles():
+@app.route('/retrieve-checked-out-books', methods=['POST'])
+def retrieve_checked_out_books():
   list_of_UPCs = request.get_json()
   title_list = []
+  print(f'****************{list_of_UPCs}*******************')
 
   for UPC in list_of_UPCs["checkedOutBooks"]:
     book_info = books.find_one({"upc" : UPC})
     book_info["_id"] = str(book_info["_id"])
-    title_list.append(book_info["title"]) # make this append ({UPC:book_info["title"]}) to "link" UPC with book in front end for next axios call
+    title_list.append(book_info) 
 
   return title_list
 
@@ -211,31 +212,43 @@ def register_new_book(UPC):
   return f'{new_book_info} registered to book database'
 
 # Check book back in
-@app.route('/check-book-in/<UPC>', methods=['PATCH'])
-def check_book_in(UPC):
-  change_book_status = "Checked in"
+@app.route('/check-book-in', methods=['POST'])
+def check_book_in():
+  student_and_book_UPC = request.get_json()
+  print(f'-------->{student_and_book_UPC}<---------')
+  student = student_and_book_UPC["studentAndBookUPC"]["student"]
+  UPC = student_and_book_UPC["studentAndBookUPC"]["book"]
+  book = books.find_one({ 'upc' : UPC })
+  wordCount = book["wordCount"]
   books.update_one({ 'upc' : UPC }, {"$set" : {
-    "status" : change_book_status,
+    "status" : "Checked in",
     "currentHolder" : "Onomichi Gakuen English Library"}})
+  users.update_one({ 'public_id' : student }, {"$pull" : {
+    "checkedOutBooks" : UPC
+  }})
+  users.update_one({ 'public_id' : student }, {"$inc" : {
+    "totalBooksRead" : 1,
+    "wordsRead" : wordCount
+  }})
 
   return f'{UPC} checked in'
 
 # Check book out to student - #TODO
-@app.route('/check-book-out/<UPC>/<public_id>', methods=['PATCH'])
-def check_book_out(UPC, public_id):
+@app.route('/check-book-out', methods=['POST'])
+def check_book_out():
+  public_id_and_book_upc = request.get_json()
+  print(f'*****************{public_id_and_book_upc}***************')
+  public_id = public_id_and_book_upc["public_id"]
+  book_upc = public_id_and_book_upc["book_upc"]
   student = users.find_one({ 'public_id' : public_id })
-  book = books.find_one({'upc' : UPC})
+  book = books.find_one({'upc' : book_upc})
 
-  _checked_out_books = list(student["checkedOutBooks"])
-  _checked_out_books.append(UPC)
+  users.find_one_and_update({ 'public_id' : public_id }, {"$push" : {"checkedOutBooks" : book_upc}})
   
-  books.update_one({ 'upc' : UPC }, {"$set" : {
+  books.update_one({ 'upc' : book_upc }, {"$set" : {
     "status" : "Checked Out",
     "currentHolder" : student["public_id"]
   }})
-
-  users.update_one({ 'public_id' : public_id }, {"$set" : {
-    "checkedOutBooks" : _checked_out_books}})
 
   return f"{book['title']} checked out to {student['first']} {student['last']}"
 

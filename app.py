@@ -1,20 +1,14 @@
 import datetime
 from distutils.log import error
-from email import message
 import json
-
 import os
-from turtle import title
 import pymongo
-from bson.objectid import ObjectId
-from bson import json_util
-from dotenv import find_dotenv, load_dotenv
+from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
 from flask_jwt_extended import create_access_token
 from flask import Flask, jsonify, make_response, Response
 from flask import request
 from flask_cors import CORS, cross_origin
-from pymongo import ReturnDocument
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 

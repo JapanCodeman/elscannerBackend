@@ -56,6 +56,9 @@ def login():
   if not user:
     return make_response('Could not verify - not user', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
+  if user["password"] == '':
+    return make_response('password-reset', 200)
+
   if check_password_hash(user["password"], password):
     try:
       token = create_access_token(identity={'userRole' : user['userRole'], 'public_id' : user['public_id'], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
@@ -64,6 +67,25 @@ def login():
       return "Token unable to be distributed", error
 
   return make_response('Could not verify - end of function', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
+
+# Password Reset
+@app.route('/password-reset', methods=['POST'])
+def password_reset():
+  email_and_password = request.get_json()
+  email = email_and_password["email"]
+  password = email_and_password["password"]
+
+  user = users.find_one({'email' : email})
+  
+  if user["password"] == '':
+    new_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
+    users.find_one_and_update({'email' : email}, {"$set" : {
+      "password" : new_password
+    }})
+    return make_response('Password reset successful', 200)
+
+  else:
+    return make_response('Password reset unsuccessful', 200)
 
 # Return all users
 @app.route('/users', methods=['GET'])

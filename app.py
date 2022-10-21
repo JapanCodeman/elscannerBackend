@@ -109,10 +109,9 @@ def register_new_admin():
     _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
     registerant_info["password"] = _hashed_password
     registerant_info["userRole"] = 'Administrator'
-    # registerant_info["isAdmin"] = True
 
     users.insert_one(registerant_info)
-  else: #TODO need to fix this response
+  else: #TODO need to fix this response - ADMIN_CODES in .env; heroku has no access
     return Response(
     status=401,
     mimetype="application/json"

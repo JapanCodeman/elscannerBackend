@@ -29,9 +29,9 @@ client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)
 
 Database = client.get_database("ELScanner")
 
-users = Database.users
 books = Database.books
-
+classes = Database.classes
+users = Database.users
 
 @app.route('/db-connect-confirm', methods=['GET']) # Not working as intended
 def database_connection_test():
@@ -87,6 +87,32 @@ def password_reset():
   else:
     return make_response('Password reset unsuccessful', 200)
 
+# Get all classes
+@app.route('/get-all-classes', methods=['GET'])
+def get_all_classes():
+  all_classes = list(classes.find())
+  for _class in all_classes:
+    _class["_id"] = str(_class["_id"])
+
+  return Response(
+    response=json.dumps(all_classes),
+    status=200,
+    mimetype="application/json"
+  )
+
+# Create new class
+@app.route('/create-new-class', methods=['POST'])
+def create_new_class():
+  new_class = request.get_json()
+  new_class["classWordsRead"] = 0
+  new_class["public_id"] = str(uuid.uuid4())
+  new_class["classMembersList"] = []
+  new_class["numberOfStudents"] = len(new_class["classMembersList"])
+
+  classes.insert_one(new_class)
+
+  return make_response("New Class Created", 200)
+
 # Return all users
 @app.route('/users', methods=['GET'])
 def find_all_users():
@@ -99,6 +125,19 @@ def find_all_users():
     status=200,
     mimetype="application/json"
   )
+
+# Return students in a particular class
+@app.route('/students-by-class', methods=['POST'])
+def students_by_class():
+  classRequest = request.get_json()
+  students = users.find(classRequest)
+  results = []
+
+  for student in students:
+    student["_id"] = str(student["_id"])
+    results.append(student)
+
+  return make_response(results)
 
 # Register new user
 @app.route('/register-new-user', methods=['POST'])

@@ -47,6 +47,7 @@ def database_connection_test():
 @cross_origin(supports_credentials=True)
 def login():
   email = request.json.get("email", None)
+  email = email.lower()
   password = request.json.get("password", None)
   user = users.find_one({"email" : email})
 
@@ -105,6 +106,7 @@ def get_all_classes():
 def create_new_class():
   new_class = request.get_json()
   new_class["classWordsRead"] = 0
+  new_class["classTotalBooksRead"] = 0
   new_class["public_id"] = str(uuid.uuid4())
   new_class["classMembersList"] = []
   new_class["numberOfStudents"] = len(new_class["classMembersList"])
@@ -143,15 +145,24 @@ def students_by_class():
 @app.route('/register-new-user', methods=['POST'])
 def register_new_user():
   registerant_info = request.get_json()
+  print(registerant_info)
   registerant_info["public_id"] = str(uuid.uuid4())
   password = registerant_info["password"]
   _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
+  registerant_info["first"] = registerant_info["first"].title()
+  registerant_info["last"] = registerant_info["last"].title()
+  registerant_info["email"] = registerant_info["email"].lower()
   registerant_info["password"] = _hashed_password
   registerant_info["userRole"] = 'Student'
   registerant_info["wordsRead"] = 0
   registerant_info["totalBooksRead"] = 0
   registerant_info["checkedOutBooks"] = []
   registerant_info["listOfReadBooks"] = []
+  _class = classes.find_one_and_update({"class" : registerant_info["class"]},
+  {"$push" : {"classMembersList" : registerant_info["public_id"]}})
+  _class = classes.find_one_and_update({"class" : registerant_info["class"]},
+  {"$inc" : {"numberOfStudents" : 1}})
+
 
   users.insert_one(registerant_info)
 
@@ -166,6 +177,9 @@ def register_new_admin():
     del(registerant_info["registrationCode"])
     del(registerant_info["class"])
     registerant_info["public_id"] = str(uuid.uuid4())
+    registerant_info["email"] = registerant_info["email"].lower()
+    registerant_info["first"] = registerant_info["first"].title()
+    registerant_info["last"] = registerant_info["last"].title()
     password = registerant_info["password"]
     _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
     registerant_info["password"] = _hashed_password
@@ -284,6 +298,10 @@ def check_book_in():
     "totalBooksRead" : 1,
     "wordsRead" : wordCount
   }})
+  classes.update_one({"class" : student["class"]}, {"$inc" : {
+    "classWordsRead" : wordCount,
+    "classTotalBooksRead" : 1
+  }})
 
   return f'{UPC} checked in'
 
@@ -306,12 +324,34 @@ def check_book_out():
 
   return f"{book['title']} checked out to {student['first']} {student['last']}"
 
+# Delete a book
 @app.route('/delete-a-book/<UPC>', methods=['DELETE'])
 def delete_a_book(UPC):
   book_to_delete = books.find_one({'upc' : UPC})
   delete_book = books.find_one_and_delete({'upc' : UPC})
 
   return f'{book_to_delete["title"]} removed from database'
+
+# Lookup individual class info
+@app.route('/get-class-info', methods=['POST'])
+def get_class_info():
+  requested_class = request.get_json()
+  print(requested_class)
+  _class = classes.find_one(requested_class)
+  _class["_id"] = str(_class["_id"])
+
+  return _class
+
+# Return all class info as list of dicts
+@app.route('/get-all-classes-info', methods=['GET'])
+def get_all_classes_info():
+  all_classes_info = classes.find()
+  all_classes = []
+  for _class in all_classes_info:
+    _class["_id"] = str(_class["_id"])
+    all_classes.append(_class)
+  
+  return all_classes
   
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import os
 import pymongo
 from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, jwt_required
 from flask import Flask, jsonify, make_response, Response
 from flask import request
 from flask_cors import CORS, cross_origin
@@ -126,6 +126,7 @@ def create_new_class():
 
 # Return all users
 @app.route('/users', methods=['GET'])
+@jwt_required()
 def find_all_users():
   results = list(users.find())
   for user in results:
@@ -139,6 +140,7 @@ def find_all_users():
 
 # Return students in a particular class
 @app.route('/students-by-class', methods=['POST'])
+@jwt_required()
 def students_by_class():
   classRequest = request.get_json()
   students = users.find(classRequest)
@@ -278,15 +280,16 @@ def retrieve_books_with_options():
   return results
 
 # Register or patch new book
-@app.route('/register-new-book/<UPC>', methods=['PATCH', 'POST', 'PUT'])
+@app.route('/register-new-book/<UPC>', methods=['POST', 'PUT'])
 def register_new_book(UPC):
 
   new_book_info = request.get_json()
   new_book_info['wordCount'] = int(new_book_info['wordCount'])
 
   books.insert_one(new_book_info)
+  new_book_info = jsonify(new_book_info)
 
-  return f'{new_book_info} registered to book database'
+  return f'{new_book_info["title"]} registered to book database'
 
 # Check book back in
 @app.route('/check-book-in', methods=['POST'])

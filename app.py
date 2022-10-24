@@ -140,7 +140,6 @@ def find_all_users():
 
 # Return students in a particular class
 @app.route('/students-by-class', methods=['POST'])
-@jwt_required()
 def students_by_class():
   classRequest = request.get_json()
   students = users.find(classRequest)

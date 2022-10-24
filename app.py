@@ -69,6 +69,15 @@ def login():
 
   return make_response('Could not verify - end of function', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
+# Password Delete
+@app.route('/delete-password', methods=['POST'])
+def delete_password():
+  public_id = request.get_json()
+  users.find_one_and_update(public_id, {"$set" : 
+  {"password" : ""}})
+
+  return "Password Deleted"
+
 # Password Reset
 @app.route('/password-reset', methods=['POST'])
 def password_reset():
@@ -283,7 +292,6 @@ def register_new_book(UPC):
 @app.route('/check-book-in', methods=['POST'])
 def check_book_in():
   student_and_book_UPC = request.get_json()
-  print(f'-------->{student_and_book_UPC}<---------')
   student = student_and_book_UPC["studentAndBookUPC"]["student"]
   UPC = student_and_book_UPC["studentAndBookUPC"]["book"]
   book = books.find_one({ 'upc' : UPC })
@@ -294,14 +302,30 @@ def check_book_in():
   users.update_one({ 'public_id' : student }, {"$pull" : {
     "checkedOutBooks" : UPC
   }})
-  users.update_one({ 'public_id' : student }, {"$inc" : {
-    "totalBooksRead" : 1,
-    "wordsRead" : wordCount
-  }})
-  classes.update_one({"class" : student["class"]}, {"$inc" : {
-    "classWordsRead" : wordCount,
-    "classTotalBooksRead" : 1
-  }})
+  student_read_book_list = users.find_one({ 'public_id' : student })["listOfReadBooks"]
+  
+  if UPC not in student_read_book_list:
+    users.update_one({ 'public_id' : student }, {"$inc" : {
+      "totalBooksRead" : 1,
+      "wordsRead" : wordCount
+    }})
+    users.update_one({ 'public_id' : student }, {"$push" : {
+      "listOfReadBooks" : UPC
+    }})
+    student = users.find_one({ 'public_id' : student})
+    classes.update_one({"class" : student["class"]}, {"$inc" : {
+      "classWordsRead" : wordCount,
+      "classTotalBooksRead" : 1
+    }})
+  
+  if UPC in student_read_book_list:
+    users.update_one({ 'public_id' : student }, {"$inc" : {
+      "wordsRead" : wordCount
+    }})
+    student = users.find_one({ 'public_id' : student})
+    classes.update_one({"class" : student["class"]}, {"$inc" : {
+      "classWordsRead" : wordCount
+    }})
 
   return f'{UPC} checked in'
 

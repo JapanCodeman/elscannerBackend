@@ -60,6 +60,9 @@ def login():
   if user["password"] == '':
     return make_response('password-reset', 200)
 
+  if not check_password_hash(user["password"], password):
+    return 'Invalid Password'
+
   if check_password_hash(user["password"], password):
     try:
       token = create_access_token(identity={'userRole' : user['userRole'], 'public_id' : user['public_id'], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
@@ -209,6 +212,7 @@ def register_new_admin():
 def lookup_user(public_id):
 
   user = users.find_one({"public_id" : public_id})
+  print(user)
   user["_id"] = str(user["_id"])
 
   return Response(
@@ -286,7 +290,6 @@ def register_new_book(UPC):
   new_book_info['wordCount'] = int(new_book_info['wordCount'])
 
   books.insert_one(new_book_info)
-  new_book_info = jsonify(new_book_info)
 
   return f'{new_book_info["title"]} registered to book database'
 

@@ -23,6 +23,7 @@ app = Flask(__name__)
 
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
+app.config['ADMIN_CODES'] = ADMIN_CODES
 cors = CORS(app, supports_credentials=True)
 jwt = JWTManager(app)
 

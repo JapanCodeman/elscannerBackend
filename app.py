@@ -1,3 +1,4 @@
+from atexit import register
 import datetime
 from distutils.log import error
 import json
@@ -159,6 +160,9 @@ def students_by_class():
 def register_new_user():
   registerant_info = request.get_json()
   print(registerant_info)
+  if users.find_one({"email" : registerant_info["email"]}):
+    return "Email already registered"
+  
   registerant_info["public_id"] = str(uuid.uuid4())
   password = registerant_info["password"]
   _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
@@ -179,7 +183,7 @@ def register_new_user():
 
   users.insert_one(registerant_info)
 
-  return f'{registerant_info["first"]} {registerant_info["last"]} registered to database' 
+  return f'Registration successful' 
 
 # Register new admin
 @app.route('/register-new-admin', methods=['POST'])
@@ -187,6 +191,7 @@ def register_new_admin():
   registerant_info = request.get_json()
 
   if registerant_info["registrationCode"] in ADMIN_CODES:
+    ADMIN_CODES.pop(registerant_info["registrationCode"])
     del(registerant_info["registrationCode"])
     del(registerant_info["class"])
     registerant_info["public_id"] = str(uuid.uuid4())

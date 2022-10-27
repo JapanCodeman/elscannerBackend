@@ -1,8 +1,8 @@
-from atexit import register
 import datetime
 from distutils.log import error
 import json
 import os
+import dotenv
 import pymongo
 from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
@@ -15,7 +15,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()
 
-ADMIN_CODES = os.environ.get('ADMIN_CODES')
+ENV_ADMIN_CODES = os.environ.get('ADMIN_CODES')
+ADMIN_CODES = list(ENV_ADMIN_CODES.split(", "))
 CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
@@ -23,7 +24,6 @@ app = Flask(__name__)
 
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
-app.config['ADMIN_CODES'] = ADMIN_CODES
 cors = CORS(app, supports_credentials=True)
 jwt = JWTManager(app)
 
@@ -160,7 +160,6 @@ def students_by_class():
 @app.route('/register-new-user', methods=['POST'])
 def register_new_user():
   registerant_info = request.get_json()
-  print(registerant_info)
   if users.find_one({"email" : registerant_info["email"]}):
     return "Email already registered"
   
@@ -184,15 +183,19 @@ def register_new_user():
 
   users.insert_one(registerant_info)
 
-  return f'Registration successful' 
+  return 'Registration successful' 
 
 # Register new admin
 @app.route('/register-new-admin', methods=['POST'])
 def register_new_admin():
   registerant_info = request.get_json()
 
-  if registerant_info["registrationCode"] in ADMIN_CODES:
-    ADMIN_CODES.pop(registerant_info["registrationCode"])
+  if registerant_info["registrationCode"] in ADMIN_CODES: # how to edit .env variable?
+
+    dotenv.unset_key(".env", "ADMIN_CODES")
+    ADMIN_CODES.remove(registerant_info["registrationCode"])
+    _ADMIN_CODES = ", ".join(ADMIN_CODES)
+    dotenv.set_key(".env", "ADMIN_CODES", _ADMIN_CODES)
     del(registerant_info["registrationCode"])
     del(registerant_info["class"])
     registerant_info["public_id"] = str(uuid.uuid4())
@@ -205,27 +208,27 @@ def register_new_admin():
     registerant_info["userRole"] = 'Administrator'
 
     users.insert_one(registerant_info)
+    return "admin registration successful"
   else: #TODO need to fix this response - ADMIN_CODES in .env; heroku has no access
-    return Response(
-    status=401,
-    mimetype="application/json"
-  )
-
-  return f'{registerant_info["first"]} {registerant_info["last"]} registered to database as admin' 
+    return "admin registration failed"
 
 # Lookup a user
 @app.route('/lookup-user/<public_id>', methods=['GET'])
 def lookup_user(public_id):
 
-  user = users.find_one({"public_id" : public_id})
-  print(user)
-  user["_id"] = str(user["_id"])
 
-  return Response(
-    response=json.dumps(user),
-    status=200,
-    mimetype="application/json"
-  )
+  user = users.find_one({"public_id" : public_id})
+  if user == None:
+    return 'User Not Found'
+
+  else:
+    user["_id"] = str(user["_id"])
+
+    return Response(
+      response=json.dumps(user),
+      status=200,
+      mimetype="application/json"
+    )
 
 # Delete a user
 @app.route('/delete-a-user/<public_id>', methods=['DELETE'])
@@ -271,7 +274,6 @@ def retrieve_book_info(UPC):
 def retrieve_checked_out_books():
   list_of_UPCs = request.get_json()
   title_list = []
-  print(f'****************{list_of_UPCs}*******************')
 
   for UPC in list_of_UPCs["checkedOutBooks"]:
     book_info = books.find_one({"upc" : UPC})
@@ -338,13 +340,12 @@ def check_book_in():
       "classWordsRead" : wordCount
     }})
 
-  return f'{UPC} checked in'
+  return f'{book["title"]} checked back in from {student["first"]} {student["last"]} - returning to Admin home'
 
 # Check book out to student - #TODO
 @app.route('/check-book-out', methods=['POST'])
 def check_book_out():
   public_id_and_book_upc = request.get_json()
-  print(f'*****************{public_id_and_book_upc}***************')
   public_id = public_id_and_book_upc["public_id"]
   book_upc = public_id_and_book_upc["book_upc"]
   student = users.find_one({ 'public_id' : public_id })
@@ -371,7 +372,6 @@ def delete_a_book(UPC):
 @app.route('/get-class-info', methods=['POST'])
 def get_class_info():
   requested_class = request.get_json()
-  print(requested_class)
   _class = classes.find_one(requested_class)
   _class["_id"] = str(_class["_id"])
 

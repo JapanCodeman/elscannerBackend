@@ -2,7 +2,7 @@ import datetime
 from distutils.log import error
 import json
 import os
-import dotenv
+import bson
 import pymongo
 from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
@@ -16,7 +16,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 load_dotenv()
 
 ENV_ADMIN_CODES = os.environ.get('ADMIN_CODES')
-ADMIN_CODES = list(ENV_ADMIN_CODES.split(", "))
+ADMIN_CODES = list(ENV_ADMIN_CODES.split(", ")) # leaving this way for now for testing if editing config vars from within app is possible
 CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
@@ -35,9 +35,9 @@ books = Database.books
 classes = Database.classes
 users = Database.users
 
-@app.route('/db-connect-confirm', methods=['GET']) # Not working as intended
+@app.route('/db-connect-confirm', methods=['GET']) 
 def database_connection_test():
-  if users.find() != None:
+  if users.find({"userRole" : "Administrator"}):
     try:
       if database_connection_test():
         return "Connected to MongoDB Atlas server"
@@ -147,14 +147,14 @@ def find_all_users():
 @app.route('/students-by-class', methods=['POST'])
 def students_by_class():
   classRequest = request.get_json()
-  students = users.find(classRequest)
+  students = users.find(classRequest).sort("first", pymongo.ASCENDING)
   results = []
 
   for student in students:
     student["_id"] = str(student["_id"])
     results.append(student)
 
-  return make_response(results)
+  return make_response(results, 200)
 
 # Register new user
 @app.route('/register-new-user', methods=['POST'])
@@ -166,9 +166,9 @@ def register_new_user():
   registerant_info["public_id"] = str(uuid.uuid4())
   password = registerant_info["password"]
   _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
-  registerant_info["first"] = registerant_info["first"].title()
-  registerant_info["last"] = registerant_info["last"].title()
-  registerant_info["email"] = registerant_info["email"].lower()
+  registerant_info["first"] = registerant_info["first"].strip().title()
+  registerant_info["last"] = registerant_info["last"].strip().title()
+  registerant_info["email"] = registerant_info["email"].strip().lower()
   registerant_info["password"] = _hashed_password
   registerant_info["userRole"] = 'Student'
   registerant_info["wordsRead"] = 0
@@ -192,16 +192,17 @@ def register_new_admin():
 
   if registerant_info["registrationCode"] in ADMIN_CODES: # how to edit .env variable?
 
-    dotenv.unset_key(".env", "ADMIN_CODES")
-    ADMIN_CODES.remove(registerant_info["registrationCode"])
-    _ADMIN_CODES = ", ".join(ADMIN_CODES)
-    dotenv.set_key(".env", "ADMIN_CODES", _ADMIN_CODES)
+    # Below commented code works for local variables, but not config vars
+    # dotenv.unset_key(".env", "ADMIN_CODES") 
+    # ADMIN_CODES.remove(registerant_info["registrationCode"])
+    # _ADMIN_CODES = ", ".join(ADMIN_CODES)
+    # dotenv.set_key(".env", "ADMIN_CODES", _ADMIN_CODES)
     del(registerant_info["registrationCode"])
     del(registerant_info["class"])
     registerant_info["public_id"] = str(uuid.uuid4())
-    registerant_info["email"] = registerant_info["email"].lower()
-    registerant_info["first"] = registerant_info["first"].title()
-    registerant_info["last"] = registerant_info["last"].title()
+    registerant_info["email"] = registerant_info["email"].strip().lower()
+    registerant_info["first"] = registerant_info["first"].strip().title()
+    registerant_info["last"] = registerant_info["last"].strip().title()
     password = registerant_info["password"]
     _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
     registerant_info["password"] = _hashed_password
@@ -233,6 +234,14 @@ def lookup_user(public_id):
 # Delete a user
 @app.route('/delete-a-user/<public_id>', methods=['DELETE'])
 def delete_a_user(public_id):
+  user = users.find_one({"public_id" : public_id})
+  if user["userRole"] == "Student":
+    classes.find_one_and_update({
+      {"class" : user["class"]}, {"$pull" : {"classMembersList" : user["public_id"]}}
+    })
+    classes.find_one_and_update({"class" : user["class"]}, {"$inc" : {
+      "numberOfStudents" : -1
+    }})
   users.delete_one({"public_id" : public_id})
 
   return 'User deleted from database'
@@ -388,6 +397,29 @@ def get_all_classes_info():
   
   return all_classes
   
+@app.route('/get-all-administrators', methods=['GET'])
+def get_all_administrators():
+  administrators = users.find({"userRole" : "Administrator"})
+  admin = []
+
+  for administrator in administrators:
+    administrator["_id"] = str(administrator["_id"])
+    admin.append(administrator)
+  
+  return make_response(admin, 200)
+
+# Get Reader Leaders
+@app.route('/get-reader-leaders', methods=['POST'])
+def get_reader_leaders():
+  reader_leader_request = request.get_json() # just include class in request
+  top_three = users.find(reader_leader_request).sort("wordsRead", pymongo.DESCENDING).limit(3)
+  _top_three = []
+  for student in top_three:
+    student["_id"] = str(student["_id"])
+    _top_three.append(student)
+  return _top_three
+
+
 
 if __name__ == "__main__":
   app.run(debug=True)

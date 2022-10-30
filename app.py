@@ -2,7 +2,6 @@ import datetime
 from distutils.log import error
 import json
 import os
-import bson
 import pymongo
 from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
@@ -24,7 +23,7 @@ app = Flask(__name__)
 
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
-cors = CORS(app, supports_credentials=True)
+cors = CORS(app)
 jwt = JWTManager(app)
 
 client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)

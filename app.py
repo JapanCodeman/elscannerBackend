@@ -45,7 +45,6 @@ def database_connection_test():
   return "Unable to connect to the server - check wifi connection/permissions"
 
 @app.route('/login', methods=["POST"])
-@cross_origin(supports_credentials=True)
 def login():
   email = request.json.get("email", None)
   email = email.lower()

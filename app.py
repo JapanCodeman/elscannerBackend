@@ -23,7 +23,7 @@ app = Flask(__name__)
 
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
-cors = CORS(app)
+cors = CORS(app, supports_credentials=True)
 jwt = JWTManager(app)
 
 client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)
@@ -45,6 +45,7 @@ def database_connection_test():
   return "Unable to connect to the server - check wifi connection/permissions"
 
 @app.route('/login', methods=["POST"])
+@cross_origin(supports_credentials=True)
 def login():
   email = request.json.get("email", None)
   email = email.lower()

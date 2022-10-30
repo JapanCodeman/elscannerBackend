@@ -127,7 +127,7 @@ def create_new_class():
 
   classes.insert_one(new_class)
 
-  return make_response("New Class Created", 200)
+  return make_response(f'New class: {new_class["class"]} created', 200)
 
 # Return all users
 @app.route('/users', methods=['GET'])
@@ -396,7 +396,29 @@ def get_all_classes_info():
     all_classes.append(_class)
   
   return all_classes
+
+# Update a class
+@app.route('/update-class', methods=['POST'])
+def update_class():
+  class_info = request.get_json() # take in { "public_id" : public_id }
+  _update_class = classes.find_one_and_update({
+    "public_id" : class_info["public_id"]},
+    {"$set" : {"class" : class_info["class"]}},
+    return_document=pymongo.ReturnDocument.AFTER)
+
+  return f'Class name updated to {class_info["class"]}'
+
+# Delete a class
+@app.route('/delete-class', methods=['DELETE'])
+def delete_a_class():
+  class_info = request.get_json()
+  users.update_many({"class" : class_info["class"]},
+  {"$set" : {"class" : ""}})
+  classes.find_one_and_delete(class_info)
+
+  return "CLASS_DELETED"
   
+# Return all administrators as array
 @app.route('/get-all-administrators', methods=['GET'])
 def get_all_administrators():
   administrators = users.find({"userRole" : "Administrator"})

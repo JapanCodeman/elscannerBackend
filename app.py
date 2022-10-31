@@ -19,7 +19,7 @@ ADMIN_CODES = list(ENV_ADMIN_CODES.split(", ")) # leaving this way for now for t
 CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
-app = Flask(__name__, static_folder='static', static_url_path='/static')
+app = Flask(__name__)
 
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY

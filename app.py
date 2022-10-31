@@ -34,10 +34,10 @@ books = Database.books
 classes = Database.classes
 users = Database.users
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def catch_all(path):
-    return app.send_static_file("index.html")
+# @app.route('/', defaults={'path': ''})
+# @app.route('/<path:path>')
+# def catch_all(path):
+#     return app.send_static_file("index.html")
 
 @app.route('/db-connect-confirm', methods=['GET']) 
 def database_connection_test():

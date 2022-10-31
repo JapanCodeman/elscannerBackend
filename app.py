@@ -19,7 +19,7 @@ ADMIN_CODES = list(ENV_ADMIN_CODES.split(", ")) # leaving this way for now for t
 CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
@@ -33,6 +33,11 @@ Database = client.get_database("ELScanner")
 books = Database.books
 classes = Database.classes
 users = Database.users
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def catch_all(path):
+    return app.send_static_file("index.html")
 
 @app.route('/db-connect-confirm', methods=['GET']) 
 def database_connection_test():

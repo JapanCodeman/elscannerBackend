@@ -34,11 +34,6 @@ books = Database.books
 classes = Database.classes
 users = Database.users
 
-# @app.route('/', defaults={'path': ''})
-# @app.route('/<path:path>')
-# def catch_all(path):
-#     return app.send_static_file("index.html")
-
 @app.route('/db-connect-confirm', methods=['GET']) 
 def database_connection_test():
   if users.find({"userRole" : "Administrator"}):
@@ -60,14 +55,14 @@ def login():
   if not email or not password:
     return make_response('Could not verify - not email or password', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
-  if not user:
-    return make_response('Could not verify - not user', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
+  if user == None:
+    return make_response('USER_NOT_FOUND', 200)
 
   if user["password"] == '':
-    return make_response('password-reset', 200)
+    return make_response('PASSWORD_RESET', 200)
 
   if not check_password_hash(user["password"], password):
-    return 'Invalid Password'
+    return 'INVALID_PASSWORD'
 
   if check_password_hash(user["password"], password):
     try:
@@ -84,8 +79,10 @@ def delete_password():
   public_id = request.get_json()
   users.find_one_and_update(public_id, {"$set" : 
   {"password" : ""}})
+  if users.find_one(public_id)["password"] == "":
+    return "PASSWORD_DELETED"
 
-  return "Password Deleted"
+  return "PASSWORD_RESET_ABORTED"
 
 # Password Reset
 @app.route('/password-reset', methods=['POST'])
@@ -448,4 +445,4 @@ def get_reader_leaders():
 
 
 if __name__ == "__main__":
-  app.run(debug=False)
+  app.run(debug=True)

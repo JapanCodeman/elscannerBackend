@@ -239,15 +239,18 @@ def lookup_user(public_id):
 def delete_a_user(public_id):
   user = users.find_one({"public_id" : public_id})
   if user["userRole"] == "Student":
-    classes.find_one_and_update({
+    classes.find_one_and_update(
       {"class" : user["class"]}, {"$pull" : {"classMembersList" : user["public_id"]}}
-    })
+    )
     classes.find_one_and_update({"class" : user["class"]}, {"$inc" : {
       "numberOfStudents" : -1
     }})
+    print("ran if statement")
+    print(user["class"])
   users.delete_one({"public_id" : public_id})
+  print("also ran users.delete_one")
 
-  return 'User deleted from database'
+  return 'USER_DELETED'
 
 # DELETE ALL USERS - A-BOMB
 @app.route('/delete-all-users', methods=['DELETE'])

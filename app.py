@@ -190,8 +190,10 @@ def register_new_user():
 @app.route('/register-new-admin', methods=['POST'])
 def register_new_admin():
   registerant_info = request.get_json()
+  if users.find_one({"email" : registerant_info["email"]}):
+    return "EMAIL_ALREADY_REGISTERED"
 
-  if registerant_info["registrationCode"] in ADMIN_CODES: # how to edit .env variable?
+  if registerant_info["registrationCode"] in ENV_ADMIN_CODES: # how to edit .env variable?
 
     # Below commented code works for local variables, but not config vars
     # dotenv.unset_key(".env", "ADMIN_CODES") 
@@ -210,9 +212,9 @@ def register_new_admin():
     registerant_info["userRole"] = 'Administrator'
 
     users.insert_one(registerant_info)
-    return "admin registration successful"
-  else: #TODO need to fix this response - ADMIN_CODES in .env; heroku has no access
-    return "admin registration failed"
+    return "ADMINISTRATOR_REGISTERED"
+  else: 
+    return "ADMINISTRATOR_REGISTRATION_FAILED"
 
 # Lookup a user
 @app.route('/lookup-user/<public_id>', methods=['GET'])
@@ -304,12 +306,15 @@ def retrieve_books_with_options():
 @app.route('/register-new-book/<UPC>', methods=['POST', 'PUT'])
 def register_new_book(UPC):
 
+  if books.find_one({"upc" : UPC }):
+    return "BOOK_ALREADY_REGISTERED"
+
   new_book_info = request.get_json()
   new_book_info['wordCount'] = int(new_book_info['wordCount'])
 
   books.insert_one(new_book_info)
 
-  return f'{new_book_info["title"]} registered to book database'
+  return f'BOOK_REGISTERED'
 
 # Check book back in
 @app.route('/check-book-in', methods=['POST'])

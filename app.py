@@ -88,7 +88,7 @@ def delete_password():
 @app.route('/password-reset', methods=['POST'])
 def password_reset():
   email_and_password = request.get_json()
-  email = email_and_password["email"]
+  email = email_and_password["email"].lower()
   password = email_and_password["password"]
 
   user = users.find_one({'email' : email})

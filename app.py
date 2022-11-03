@@ -66,7 +66,7 @@ def login():
 
   if check_password_hash(user["password"], password):
     try:
-      token = create_access_token(identity={'userRole' : user['userRole'], 'public_id' : user['public_id'], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)})
+      token = create_access_token(identity={'userRole' : user['userRole'], 'public_id' : user['public_id'], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=1)})
       return jsonify(token=token)
     except:
       return "Token unable to be distributed", error
@@ -118,6 +118,7 @@ def get_all_classes():
 
 # Create new class
 @app.route('/create-new-class', methods=['POST'])
+@jwt_required()
 def create_new_class():
   new_class = request.get_json()
   new_class["classWordsRead"] = 0
@@ -245,10 +246,12 @@ def delete_a_user(public_id):
     classes.find_one_and_update({"class" : user["class"]}, {"$inc" : {
       "numberOfStudents" : -1
     }})
-    print("ran if statement")
-    print(user["class"])
+
+  if user["userRole"] == "Administrator":
+    if users.count_documents({"userRole" : "Administrator"}) == 1:
+      return 'LAST_ADMIN'
+
   users.delete_one({"public_id" : public_id})
-  print("also ran users.delete_one")
 
   return 'USER_DELETED'
 
@@ -319,7 +322,7 @@ def register_new_book(UPC):
 
   return f'BOOK_REGISTERED'
 
-# Check book back in
+# Check book back in - #TODO - UGLY ass code here...
 @app.route('/check-book-in', methods=['POST'])
 def check_book_in():
   student_and_book_UPC = request.get_json()

@@ -9,6 +9,7 @@ from flask_jwt_extended import create_access_token, jwt_required
 from flask import Flask, jsonify, make_response, Response
 from flask import request
 from flask_cors import CORS, cross_origin
+from requests import HTTPError
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -21,6 +22,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 
 app = Flask(__name__)
 
+# Config options
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
 cors = CORS(app, supports_credentials=True)
@@ -34,15 +36,18 @@ books = Database.books
 classes = Database.classes
 users = Database.users
 
-@app.route('/db-connect-confirm', methods=['GET']) 
-def database_connection_test():
-  if users.find({"userRole" : "Administrator"}):
-    try:
-      if database_connection_test():
-        return "Connected to MongoDB Atlas server"
-    except Exception:
-      return "Unable to connect to the server"
-  return "Unable to connect to the server - check wifi connection/permissions"
+
+# Callbacks to use throughout app on all routes
+# @jwt.expired_token_loader
+# def token_expired(jwt_header, jwt_payload):
+#   return make_response('SESSION_TIMEOUT', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
+
+# @jwt.needs_fresh_token_loader
+# def fresh_token_required(jwt_header, jwt_payload):
+#   return make_response('SESSION_HAS_TIMED_OUT', 401)
+
+
+### START OF ROUTES ###
 
 @app.route('/login', methods=["POST"])
 @cross_origin(supports_credentials=True)
@@ -66,7 +71,7 @@ def login():
 
   if check_password_hash(user["password"], password):
     try:
-      token = create_access_token(identity={'userRole' : user['userRole'], 'public_id' : user['public_id'], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=1)})
+      token = create_access_token(identity=({'userRole' : user['userRole'], 'public_id' : user['public_id']}), expires_delta=(datetime.timedelta(minutes=15)), fresh=(True))
       return jsonify(token=token)
     except:
       return "Token unable to be distributed", error
@@ -118,32 +123,36 @@ def get_all_classes():
 
 # Create new class
 @app.route('/create-new-class', methods=['POST'])
-@jwt_required()
+# @jwt_required(fresh=True)
 def create_new_class():
-  new_class = request.get_json()
-  new_class["classWordsRead"] = 0
-  new_class["classTotalBooksRead"] = 0
-  new_class["public_id"] = str(uuid.uuid4())
-  new_class["classMembersList"] = []
-  new_class["numberOfStudents"] = len(new_class["classMembersList"])
+  try:
+    new_class = request.get_json()
+    new_class["classWordsRead"] = 0
+    new_class["classTotalBooksRead"] = 0
+    new_class["public_id"] = str(uuid.uuid4())
+    new_class["classMembersList"] = []
+    new_class["numberOfStudents"] = len(new_class["classMembersList"])
 
-  classes.insert_one(new_class)
+    classes.insert_one(new_class)
 
-  return make_response(f'New class: {new_class["class"]} created', 200)
+    return make_response(f'New class: {new_class["class"]} created', 200)
+
+  except(HTTPError):
+    return make_response('SESSION_TIMEOUT', 403)
 
 # Return all users
-@app.route('/users', methods=['GET'])
-@jwt_required()
-def find_all_users():
-  results = list(users.find())
-  for user in results:
-    user["_id"] = str(user["_id"])
+# @app.route('/users', methods=['GET'])
+# @jwt_required(fresh=True)
+# def find_all_users():
+#   results = list(users.find())
+#   for user in results:
+#     user["_id"] = str(user["_id"])
 
-  return Response(
-    response=json.dumps(results),
-    status=200,
-    mimetype="application/json"
-  )
+#   return Response(
+#     response=json.dumps(results),
+#     status=200,
+#     mimetype="application/json"
+#   )
 
 # Return students in a particular class
 @app.route('/students-by-class', methods=['POST'])

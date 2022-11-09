@@ -9,6 +9,7 @@ from flask_jwt_extended import create_access_token, jwt_required
 from flask import Flask, jsonify, make_response, Response
 from flask import request
 from flask_cors import CORS, cross_origin
+from random import randint
 from requests import HTTPError
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -19,12 +20,14 @@ ENV_ADMIN_CODES = os.environ.get('ADMIN_CODES')
 ADMIN_CODES = list(ENV_ADMIN_CODES.split(", ")) # leaving this way for now for testing if editing config vars from within app is possible
 CONNECTION_STRING = os.environ.get('CONNECTION_STRING')
 SECRET_KEY = os.environ.get('SECRET_KEY')
+PASSWORD_RESET_CODES = list(os.environ.get('PASSWORD_RESET_CODES').split(", "))
 
 app = Flask(__name__)
 
 # Config options
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['JWT_SECRET_KEY'] = SECRET_KEY
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)
 cors = CORS(app, supports_credentials=True)
 jwt = JWTManager(app)
 
@@ -40,7 +43,9 @@ users = Database.users
 # Callbacks to use throughout app on all routes
 # @jwt.expired_token_loader
 # def token_expired(jwt_header, jwt_payload):
-#   return make_response('SESSION_TIMEOUT', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
+#   jwt_header = get_jwt_header
+#   jwt_payload = get_jwt
+#   return redirect('localhost:3000/login')
 
 # @jwt.needs_fresh_token_loader
 # def fresh_token_required(jwt_header, jwt_payload):
@@ -57,21 +62,25 @@ def login():
   password = request.json.get("password", None)
   user = users.find_one({"email" : email})
 
-  if not email or not password:
-    return make_response('Could not verify - not email or password', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
+  if not email:
+    return make_response('Could not verify - email required', 401, {'WWW-Authenticate' : 'Basic realm="Login required"'})
 
   if user == None:
     return make_response('USER_NOT_FOUND', 200)
 
-  if user["password"] == '':
-    return make_response('PASSWORD_RESET', 200)
+  if user["passwordReset"] == True and check_password_hash(user["password"], password):
+    token = create_access_token(identity=({'userRole' : user['userRole'], 'public_id' : user['public_id']}), fresh=(True))
+    return jsonify(token=token, data='PASSWORD_RESET')
+
+  if user["passwordReset"] == True and not check_password_hash(user["password"], password):
+    return make_response('INVALID_PASSWORD', 200)
 
   if not check_password_hash(user["password"], password):
     return 'INVALID_PASSWORD'
 
   if check_password_hash(user["password"], password):
     try:
-      token = create_access_token(identity=({'userRole' : user['userRole'], 'public_id' : user['public_id']}), expires_delta=(datetime.timedelta(minutes=15)), fresh=(True))
+      token = create_access_token(identity=({'userRole' : user['userRole'], 'public_id' : user['public_id']}), fresh=(True))
       return jsonify(token=token)
     except:
       return "Token unable to be distributed", error
@@ -80,17 +89,26 @@ def login():
 
 # Password Delete
 @app.route('/delete-password', methods=['POST'])
+@jwt_required(fresh=True)
 def delete_password():
   public_id = request.get_json()
+  temp_password = PASSWORD_RESET_CODES[randint(1, 50)]
   users.find_one_and_update(public_id, {"$set" : 
-  {"password" : ""}})
-  if users.find_one(public_id)["password"] == "":
-    return "PASSWORD_DELETED"
+  {"password" : generate_password_hash(temp_password, method='pbkdf2:sha256', salt_length=16)}})
+  if check_password_hash(users.find_one(public_id)['password'], temp_password):
+    users.find_one_and_update(public_id, { "$set" :
+    { "passwordReset" : True }})
+
+    return {
+      "message": "PASSWORD_RESET",
+      "temporaryPassword":temp_password
+    }
 
   return "PASSWORD_RESET_ABORTED"
 
 # Password Reset
 @app.route('/password-reset', methods=['POST'])
+@jwt_required(fresh=True)
 def password_reset():
   email_and_password = request.get_json()
   email = email_and_password["email"].lower()
@@ -98,18 +116,22 @@ def password_reset():
 
   user = users.find_one({'email' : email})
   
-  if user["password"] == '':
+  if user["passwordReset"] == True:
     new_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
     users.find_one_and_update({'email' : email}, {"$set" : {
       "password" : new_password
     }})
-    return make_response('Password reset successful', 200)
+    users.find_one_and_update({'email' : email}, {"$set" : {
+      "passwordReset" : False
+    }})
+    return make_response('Password reset successful', 200) # must return token here
 
   else:
     return make_response('Password reset unsuccessful', 200)
 
 # Get all classes
 @app.route('/get-all-classes', methods=['GET'])
+@jwt_required(fresh=True)
 def get_all_classes():
   all_classes = list(classes.find())
   for _class in all_classes:
@@ -121,9 +143,23 @@ def get_all_classes():
     mimetype="application/json"
   )
 
+# Get all classes - class name only
+@app.route('/get-all-class-names', methods=['GET'])
+def get_all_class_names():
+  all_classes = list(classes.find())
+  class_names = []
+  for _class in all_classes:
+    class_names.append(_class["class"])
+
+  return Response(
+    response=json.dumps(class_names),
+    status=200,
+    mimetype="application/json"
+  )
+
 # Create new class
 @app.route('/create-new-class', methods=['POST'])
-# @jwt_required(fresh=True)
+@jwt_required(fresh=True)
 def create_new_class():
   try:
     new_class = request.get_json()
@@ -138,24 +174,11 @@ def create_new_class():
     return make_response(f'New class: {new_class["class"]} created', 200)
 
   except(HTTPError):
-    return make_response('SESSION_TIMEOUT', 403)
-
-# Return all users
-# @app.route('/users', methods=['GET'])
-# @jwt_required(fresh=True)
-# def find_all_users():
-#   results = list(users.find())
-#   for user in results:
-#     user["_id"] = str(user["_id"])
-
-#   return Response(
-#     response=json.dumps(results),
-#     status=200,
-#     mimetype="application/json"
-#   )
+    return make_response('SESSION_TIMEOUT', 401)
 
 # Return students in a particular class
 @app.route('/students-by-class', methods=['POST'])
+@jwt_required(fresh=True)
 def students_by_class():
   classRequest = request.get_json()
   students = users.find(classRequest).sort("first", pymongo.ASCENDING)
@@ -181,14 +204,42 @@ def register_new_user():
   registerant_info["last"] = registerant_info["last"].strip().title()
   registerant_info["email"] = registerant_info["email"].strip().lower()
   registerant_info["password"] = _hashed_password
+  registerant_info["passwordReset"] = False
   registerant_info["userRole"] = 'Student'
   registerant_info["wordsRead"] = 0
   registerant_info["totalBooksRead"] = 0
   registerant_info["checkedOutBooks"] = []
   registerant_info["listOfReadBooks"] = []
-  _class = classes.find_one_and_update({"class" : registerant_info["class"]},
+  classes.find_one_and_update({"class" : registerant_info["class"]},
   {"$push" : {"classMembersList" : registerant_info["public_id"]}})
-  _class = classes.find_one_and_update({"class" : registerant_info["class"]},
+  classes.find_one_and_update({"class" : registerant_info["class"]},
+  {"$inc" : {"numberOfStudents" : 1}})
+
+
+  users.insert_one(registerant_info)
+
+  return 'Registration successful' 
+
+# Register new student from Admin - with blank password field for student to set
+@app.route('/admin-register-new-user', methods=['POST'])
+def admin_register_new_student():
+  registerant_info = request.get_json()
+  if users.find_one({"email" : registerant_info["email"]}):
+    return "Email already registered"
+  
+  registerant_info["public_id"] = str(uuid.uuid4())
+  registerant_info["first"] = registerant_info["first"].strip().title()
+  registerant_info["last"] = registerant_info["last"].strip().title()
+  registerant_info["email"] = registerant_info["email"].strip().lower()
+  registerant_info["password"] = ''
+  registerant_info["userRole"] = 'Student'
+  registerant_info["wordsRead"] = 0
+  registerant_info["totalBooksRead"] = 0
+  registerant_info["checkedOutBooks"] = []
+  registerant_info["listOfReadBooks"] = []
+  classes.find_one_and_update({"class" : registerant_info["class"]},
+  {"$push" : {"classMembersList" : registerant_info["public_id"]}})
+  classes.find_one_and_update({"class" : registerant_info["class"]},
   {"$inc" : {"numberOfStudents" : 1}})
 
 
@@ -228,9 +279,8 @@ def register_new_admin():
 
 # Lookup a user
 @app.route('/lookup-user/<public_id>', methods=['GET'])
+@jwt_required(fresh=True)
 def lookup_user(public_id):
-
-
   user = users.find_one({"public_id" : public_id})
   if user == None:
     return 'User Not Found'
@@ -246,6 +296,7 @@ def lookup_user(public_id):
 
 # Delete a user
 @app.route('/delete-a-user/<public_id>', methods=['DELETE'])
+@jwt_required(fresh=True)
 def delete_a_user(public_id):
   user = users.find_one({"public_id" : public_id})
   if user["userRole"] == "Student":
@@ -266,6 +317,7 @@ def delete_a_user(public_id):
 
 # DELETE ALL USERS - A-BOMB
 @app.route('/delete-all-users', methods=['DELETE'])
+@jwt_required(fresh=True)
 def delete_all_users():
   users.delete_many({})
 
@@ -319,6 +371,7 @@ def retrieve_books_with_options():
 
 # Register or patch new book
 @app.route('/register-new-book/<UPC>', methods=['POST', 'PUT'])
+@jwt_required(fresh=True)
 def register_new_book(UPC):
 
   if books.find_one({"upc" : UPC }):
@@ -333,6 +386,7 @@ def register_new_book(UPC):
 
 # Check book back in - #TODO - UGLY ass code here...
 @app.route('/check-book-in', methods=['POST'])
+@jwt_required(fresh=True)
 def check_book_in():
   student_and_book_UPC = request.get_json()
   student = student_and_book_UPC["studentAndBookUPC"]["student"]
@@ -374,6 +428,7 @@ def check_book_in():
 
 # Check book out to student - #TODO
 @app.route('/check-book-out', methods=['POST'])
+@jwt_required(fresh=True)
 def check_book_out():
   public_id_and_book_upc = request.get_json()
   public_id = public_id_and_book_upc["public_id"]
@@ -392,6 +447,7 @@ def check_book_out():
 
 # Delete a book
 @app.route('/delete-a-book/<UPC>', methods=['DELETE'])
+@jwt_required(fresh=True)
 def delete_a_book(UPC):
   book_to_delete = books.find_one({'upc' : UPC})
   delete_book = books.find_one_and_delete({'upc' : UPC})
@@ -400,6 +456,7 @@ def delete_a_book(UPC):
 
 # Lookup individual class info
 @app.route('/get-class-info', methods=['POST'])
+@jwt_required(fresh=True)
 def get_class_info():
   requested_class = request.get_json()
   _class = classes.find_one(requested_class)
@@ -409,6 +466,7 @@ def get_class_info():
 
 # Return all class info as list of dicts
 @app.route('/get-all-classes-info', methods=['GET'])
+@jwt_required()
 def get_all_classes_info():
   all_classes_info = classes.find()
   all_classes = []
@@ -420,6 +478,7 @@ def get_all_classes_info():
 
 # Update a class
 @app.route('/update-class', methods=['POST'])
+@jwt_required(fresh=True)
 def update_class():
   class_info = request.get_json() # take in { "public_id" : public_id }
   _update_class = classes.find_one_and_update({
@@ -430,17 +489,18 @@ def update_class():
   return f'Class name updated to {class_info["class"]}'
 
 # Delete a class
-@app.route('/delete-class', methods=['DELETE'])
-def delete_a_class():
-  class_info = request.get_json()
-  users.update_many({"class" : class_info["class"]},
+@app.route('/delete-class/<_class>', methods=['DELETE'])
+@jwt_required(fresh=True)
+def delete_a_class(_class):
+  users.update_many({"class" : _class},
   {"$set" : {"class" : ""}})
-  classes.find_one_and_delete(class_info)
+  classes.find_one_and_delete({"class": _class})
 
   return "CLASS_DELETED"
   
 # Return all administrators as array
 @app.route('/get-all-administrators', methods=['GET'])
+@jwt_required(fresh=True)
 def get_all_administrators():
   administrators = users.find({"userRole" : "Administrator"})
   admin = []

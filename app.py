@@ -224,6 +224,7 @@ def register_new_user():
 @app.route('/admin-register-new-user', methods=['POST'])
 def admin_register_new_student():
   registerant_info = request.get_json()
+  temp_password = PASSWORD_RESET_CODES[randint(1, 50)]
   if users.find_one({"email" : registerant_info["email"]}):
     return "Email already registered"
   
@@ -231,7 +232,7 @@ def admin_register_new_student():
   registerant_info["first"] = registerant_info["first"].strip().title()
   registerant_info["last"] = registerant_info["last"].strip().title()
   registerant_info["email"] = registerant_info["email"].strip().lower()
-  registerant_info["password"] = ''
+  registerant_info["password"] = temp_password
   registerant_info["passwordReset"] = False
   registerant_info["userRole"] = 'Student'
   registerant_info["wordsRead"] = 0
@@ -246,7 +247,10 @@ def admin_register_new_student():
 
   users.insert_one(registerant_info)
 
-  return 'Registration successful' 
+  return {
+      "message": "PASSWORD_RESET",
+      "temporaryPassword": temp_password
+    }
 
 # Register new admin
 @app.route('/register-new-admin', methods=['POST'])
@@ -285,7 +289,7 @@ def register_new_admin():
 def lookup_user(public_id):
   user = users.find_one({"public_id" : public_id})
   if user == None:
-    return 'User Not Found'
+    return 'USER_NOT_FOUND'
 
   else:
     user["_id"] = str(user["_id"])

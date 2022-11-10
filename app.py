@@ -232,6 +232,7 @@ def admin_register_new_student():
   registerant_info["last"] = registerant_info["last"].strip().title()
   registerant_info["email"] = registerant_info["email"].strip().lower()
   registerant_info["password"] = ''
+  registerant_info["passwordReset"] = False
   registerant_info["userRole"] = 'Student'
   registerant_info["wordsRead"] = 0
   registerant_info["totalBooksRead"] = 0
@@ -268,6 +269,7 @@ def register_new_admin():
     registerant_info["first"] = registerant_info["first"].strip().title()
     registerant_info["last"] = registerant_info["last"].strip().title()
     password = registerant_info["password"]
+    registerant_info["passwordReset"] = False
     _hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
     registerant_info["password"] = _hashed_password
     registerant_info["userRole"] = 'Administrator'

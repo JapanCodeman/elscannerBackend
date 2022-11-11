@@ -9,6 +9,7 @@ from flask_jwt_extended import create_access_token, jwt_required
 from flask import Flask, jsonify, make_response, Response
 from flask import request
 from flask_cors import CORS, cross_origin
+from flask_talisman import Talisman
 from random import randint
 from requests import HTTPError
 import uuid
@@ -30,6 +31,7 @@ app.config['JWT_SECRET_KEY'] = SECRET_KEY
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)
 cors = CORS(app, supports_credentials=True)
 jwt = JWTManager(app)
+Talisman(app, content_security_policy=None)
 
 client = pymongo.MongoClient(CONNECTION_STRING, serverSelectionTimeoutMS=15000)
 
@@ -384,6 +386,7 @@ def register_new_book(UPC):
     return "BOOK_ALREADY_REGISTERED"
 
   new_book_info = request.get_json()
+  new_book_info['title'] = new_book_info['title'].title()
   new_book_info['wordCount'] = int(new_book_info['wordCount'])
 
   books.insert_one(new_book_info)

@@ -475,6 +475,7 @@ def get_class_info():
 
 # Return all class info as list of dicts
 @app.route('/get-all-classes-info', methods=['GET'])
+@cross_origin()
 @jwt_required()
 def get_all_classes_info():
   all_classes_info = classes.find()

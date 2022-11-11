@@ -15,6 +15,7 @@ pyjwt = "*"
 python-dotenv = "*"
 gunicorn = "*"
 mongodbatlas = "*"
+flask-talisman = "*"
 
 [dev-packages]
 

@@ -346,6 +346,7 @@ def retrieve_book_info(UPC):
   if books.count_documents({ 'upc' : UPC }, limit = 1):
     book_info = books.find_one({"upc" : UPC})
     book_info["_id"] = str(book_info["_id"])
+    book_info["checkOutDate"] = str(book_info["checkOutDate"])
   # held_by = books.find_one({ "currentHolder" : {"$exists" : "true"}}) <--unnecessary? Just include current holder in book object and return that
 
     return Response(
@@ -356,7 +357,35 @@ def retrieve_book_info(UPC):
 
   return 'Book not registered'
 
-# Retrieve book title(s) from list
+# Retrieve list of all registered publishers
+@app.route('/retrieve-registered-publishers', methods=['GET'])
+@cross_origin(True)
+def retrieve_registered_publishers():
+  list_of_publishers = []
+  all_books = books.distinct("publisher")
+
+  for publisher in all_books:
+    list_of_publishers.append(publisher)
+
+  return list_of_publishers
+
+# Retrieve all currently checked out books and their holders
+@app.route('/retrieve-all-checked-out-books', methods=['GET'])
+@jwt_required(fresh=True)
+def retrieve_all_checked_out_books():
+  list_of_checked_out_books = books.find({ "currentHolder" : {"$ne" : "Onomichi Gakuen English Library"}})
+  _list = []
+
+  for book in list_of_checked_out_books:
+    book["_id"] = str(book["_id"])
+    today = datetime.datetime.now()
+    check_out_date = book["checkOutDate"]
+    book["totalDaysCheckedOut"] = (today - check_out_date).days
+    _list.append(book)
+
+  return _list
+
+# Retrieve book title(s) from list for a set of UPCs
 @app.route('/retrieve-checked-out-books', methods=['POST'])
 def retrieve_checked_out_books():
   list_of_UPCs = request.get_json()
@@ -404,7 +433,11 @@ def check_book_in():
   wordCount = book["wordCount"]
   books.update_one({ 'upc' : UPC }, {"$set" : {
     "status" : "Checked in",
-    "currentHolder" : "Onomichi Gakuen English Library"}})
+    "currentHolder" : "Onomichi Gakuen English Library",
+    "checkOutDate" : None}})
+  books.update_one({ 'upc' : UPC }, {"$unset" : {
+    "totalDaysCheckedOut" : ""
+  }})
   users.update_one({ 'public_id' : student }, {"$pull" : {
     "checkedOutBooks" : UPC
   }})
@@ -449,7 +482,8 @@ def check_book_out():
   
   books.update_one({ 'upc' : book_upc }, {"$set" : {
     "status" : "Checked Out",
-    "currentHolder" : student["public_id"]
+    "currentHolder" : student["public_id"],
+    "checkOutDate" : datetime.datetime.now()
   }})
 
   return f"{book['title']} checked out to {student['first']} {student['last']}"
@@ -534,4 +568,4 @@ def get_reader_leaders():
 
 
 if __name__ == "__main__":
-  app.run(debug=False)
+  app.run(debug=True)

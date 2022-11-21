@@ -370,7 +370,9 @@ def retrieve_book_info(UPC):
     if books.count_documents({'upc': UPC}, limit=1):
         book_info = books.find_one({"upc": UPC})
         book_info["_id"] = str(book_info["_id"])
-        book_info["checkOutDate"] = str(book_info["checkOutDate"])
+
+        if "checkOutDate" in book_info:
+            book_info["checkOutDate"] = str(book_info["checkOutDate"])
     # held_by = books.find_one({ "currentHolder" : {"$exists" : "true"}}) <--unnecessary? Just include current holder in book object and return that
 
         return Response(

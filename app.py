@@ -715,14 +715,14 @@ def year_reset():
     if user["userRole"] == "Administrator" and admin_reset_request["adminYearResetApprovalCount"] >= 1:
 
         # Reset all students' class field to "" - students will set new class on next login
-        students = users_test.find({"userRole": "Student"})
+        students = users.find({"userRole": "Student"})
         for student in students:
             student_public_id = student["public_id"]
-            users_test.update_one({"public_id": student_public_id}, {
-                                  "$set": {"class": ""}})
+            users.update_one({"public_id": student_public_id}, {
+                "$set": {"class": ""}})
 
         # move current classes to legacyClasses collection
-        all_classes = classes_test.find()  # <--- cursor object
+        all_classes = classes.find()  # <--- cursor object
 
         all_classes_array = []
         for class_object in all_classes:  # <--- deconstruct cursor object into array
@@ -749,7 +749,7 @@ def year_reset():
         legacy_classes.insert_one({new_legacy_year_string: all_classes_array})
 
         # Delete classes from classes (currently use classesTest)
-        classes_test.delete_many({})
+        classes.delete_many({})
 
         # reset adminYearResetApprovalCount to 0 and all admin yearResetRequest to false
         legacy_classes.find_one_and_update({"adminYearResetApprovalCount": {"$gt": -1}}, {"$set": {
@@ -780,6 +780,20 @@ def revoke_system_reset_request():
         "63fff70c355962f7bd0f3cb8")}, {"$inc": {"adminYearResetApprovalCount": -1}})
 
     return "SYSTEM_RESET_REQUEST_REVOKED"
+
+
+@app.route('/request-admin-registration-code', methods=['POST'])
+@cross_origin(supports_credentials=True)
+@jwt_required(fresh=True)
+def request_admin_registration_code():
+    public_id = request.get_json()
+    if users.find_one({"public_id": public_id}):
+        index = randint(1, 46)
+        admin_reg_code = ADMIN_CODES[index]
+
+        return admin_reg_code
+
+    return 'ADMIN_NOT_FOUND'
 
 
 if __name__ == "__main__":

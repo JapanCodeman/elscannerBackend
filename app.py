@@ -2,6 +2,7 @@ import datetime
 from distutils.log import error
 import json
 import os
+from bson import ObjectId
 import pymongo
 from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
@@ -12,6 +13,7 @@ from flask_cors import CORS, cross_origin
 from flask_talisman import Talisman
 from random import randint
 from requests import HTTPError
+from bson.json_util import dumps
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -41,9 +43,24 @@ Database = client.get_database("ELScanner")
 books = Database.books
 classes = Database.classes
 users = Database.users
+legacy_classes = Database.legacyClasses
+users_test = Database.usersTest
+classes_test = Database.classesTest
 
+# Reset test collections to default for testing
+
+# classes_test.delete_many({})
+# users_test.delete_many({})
+# current_students = users.find({"userRole": "Student"})
+# for student in current_students:
+#     users_test.insert_one(student)
+
+# current_classes = classes.find()
+# for _class in current_classes:
+#     classes_test.insert_one(_class)
 
 ### START OF ROUTES ###
+
 
 @app.route('/login', methods=["POST"])
 @cross_origin(supports_credentials=True)
@@ -69,6 +86,12 @@ def login():
 
     if not check_password_hash(user["password"], password):
         return 'INVALID_PASSWORD'
+
+# new check for class reset at year end
+    if user["userRole"] == "Student" and user["class"] == "" and check_password_hash(user["password"], password):
+        token = create_access_token(identity=(
+            {'userRole': user['userRole'], 'public_id': user['public_id']}), fresh=(True))
+        return jsonify(token=token, data='CLASS_RESET')
 
     if check_password_hash(user["password"], password):
         try:
@@ -316,6 +339,22 @@ def lookup_user(public_id):
             status=200,
             mimetype="application/json"
         )
+
+# Update a student's class
+
+
+@app.route('/update-student-class', methods=['POST'])
+@jwt_required(fresh=True)
+def update_student_class():
+    student_class_info = request.get_json()
+    print(student_class_info)
+    print(student_class_info["public_id"])
+    users.find_one_and_update({
+        "public_id": student_class_info["public_id"]},
+        {"$set": {"class": student_class_info["class"]}},
+        return_document=pymongo.ReturnDocument.AFTER)
+
+    return f'CLASS_UPDATED'
 
 # Delete a user
 
@@ -623,6 +662,124 @@ def get_reader_leaders():
         student["_id"] = str(student["_id"])
         _top_three.append(student)
     return _top_three
+
+# YEAR RESET - BIG BOMB - write in date check? Only available after March 20th of every year?
+
+
+@app.route('/check-year-reset-count', methods=['GET'])
+@cross_origin(supports_credentials=True)
+@jwt_required(fresh=True)
+def check_year_reset_count():
+    today = datetime.datetime.today()
+    march_20th = datetime.datetime(today.year, 3, 20)
+
+    if today < march_20th:
+        print("Today is after March 20th")
+
+        return "TIME_DELTA_ERROR"
+
+    count = legacy_classes.find_one(
+        {"adminYearResetApprovalCount": {"$gt": -1}})
+    return f'{count["adminYearResetApprovalCount"]}'
+
+
+@app.route('/year-reset', methods=['POST'])
+@cross_origin(supports_credentials=True)
+@jwt_required(fresh=True)
+def year_reset():
+    today = datetime.datetime.today()
+    march_20th = datetime.datetime(today.year, 3, 20)
+
+    if today < march_20th:
+        print("Today is after March 20th")
+
+        return "TIME_DELTA_ERROR"
+
+    public_id = request.get_json()
+    user = users.find_one({"public_id": public_id})
+    admin_reset_request = legacy_classes.find_one(
+        {"adminYearResetApprovalCount": {"$gt": -1}})
+
+    # increment approval count if total approval count < 2
+    if user["userRole"] == "Administrator" and admin_reset_request["adminYearResetApprovalCount"] < 1:
+        users.find_one_and_update({"public_id": public_id}, {
+                                  "$set": {"yearResetRequest": True}})
+        legacy_classes.find_one_and_update(admin_reset_request,
+                                           {"$inc": {
+                                               "adminYearResetApprovalCount": 1
+                                           }})
+
+        return "YEAR_REQUEST_SUCCESS"
+
+    # initiate system reset if two administrators approve
+    if user["userRole"] == "Administrator" and admin_reset_request["adminYearResetApprovalCount"] >= 1:
+
+        # Reset all students' class field to "" - students will set new class on next login
+        students = users_test.find({"userRole": "Student"})
+        for student in students:
+            student_public_id = student["public_id"]
+            users_test.update_one({"public_id": student_public_id}, {
+                                  "$set": {"class": ""}})
+
+        # move current classes to legacyClasses collection
+        all_classes = classes_test.find()  # <--- cursor object
+
+        all_classes_array = []
+        for class_object in all_classes:  # <--- deconstruct cursor object into array
+            all_classes_array.append(class_object)
+
+        # Get most recent year from docs in legacyClasses collection
+        all_documents_cursor = legacy_classes.find()
+        all_documents = []
+        for document in all_documents_cursor:
+            all_documents.append(document)
+        total_legacy_years_list = []
+        for dict in all_documents:
+            for keys in dict.keys():
+                if len(keys) == 4:
+                    keys = int(keys)
+                    total_legacy_years_list.append(keys)
+
+        most_recent_year = max(total_legacy_years_list)
+        new_legacy_year = int(most_recent_year)
+        new_legacy_year += 1
+        new_legacy_year_string = str(new_legacy_year)
+
+        # Copy classes to legacyClasses as objects into array for the year
+        legacy_classes.insert_one({new_legacy_year_string: all_classes_array})
+
+        # Delete classes from classes (currently use classesTest)
+        classes_test.delete_many({})
+
+        # reset adminYearResetApprovalCount to 0 and all admin yearResetRequest to false
+        legacy_classes.find_one_and_update({"adminYearResetApprovalCount": {"$gt": -1}}, {"$set": {
+            "adminYearResetApprovalCount": 0
+        }})
+        administrators = users.find({"userRole": "Administrator"})
+        for admin in administrators:
+            users.find_one_and_update({"public_id": admin["public_id"]}, {"$set": {
+                                      "yearResetRequest": False}})
+
+        return "SYSTEM_RESET_TEST_COMPLETE"
+
+    if user["userRole"] == "Administrator" and admin_reset_request["adminYearResetApprovalCount"] > 2:
+        print(f'----->adminYearResetApprovalCount > 2<-------')
+        return "ERR-adminYearResetApprovalCount > 2"
+
+    return "ADMIN_REQUEST_FAILED"
+
+
+@app.route('/revoke-system-reset-request', methods=['POST'])
+@cross_origin(supports_credentials=True)
+@jwt_required(fresh=True)
+def revoke_system_reset_request():
+    public_id = request.get_json()
+    users.find_one_and_update({"public_id": public_id}, {
+                              "$set": {"yearResetRequest": False}})
+    legacy_classes.find_one_and_update({"_id": ObjectId(
+        "63fff70c355962f7bd0f3cb8")}, {"$inc": {"adminYearResetApprovalCount": -1}})
+
+    return "SYSTEM_RESET_REQUEST_REVOKED"
 
 
 if __name__ == "__main__":

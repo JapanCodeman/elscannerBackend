@@ -315,6 +315,7 @@ def register_new_admin():
             password, method='pbkdf2:sha256', salt_length=16)
         registerant_info["password"] = _hashed_password
         registerant_info["userRole"] = 'Administrator'
+        registerant_info["yearResetRequest"] = False
 
         users.insert_one(registerant_info)
         return "ADMINISTRATOR_REGISTERED"

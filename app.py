@@ -348,8 +348,6 @@ def lookup_user(public_id):
 @jwt_required(fresh=True)
 def update_student_class():
     student_class_info = request.get_json()
-    print(student_class_info)
-    print(student_class_info["public_id"])
     users.find_one_and_update({
         "public_id": student_class_info["public_id"]},
         {"$set": {"class": student_class_info["class"]}},
@@ -692,7 +690,7 @@ def year_reset():
     march_20th = datetime.datetime(today.year, 3, 20)
 
     if today < march_20th:
-        print("Today is after March 20th")
+        print("Today is before March 20th")
 
         return "TIME_DELTA_ERROR"
 
